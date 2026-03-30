@@ -1,22 +1,11 @@
 # =============================================================================
-# VPN Platform - Docker Compose (Compatible con Dockploy)
-# =============================================================================
-# Plataforma VPN personal con WireGuard, Pi-hole y monitoreo.
-# Usa el Traefik de Dockploy para HTTPS y reverse proxy.
-#
-# Uso:
-#   1. Importar en Dockploy como proyecto Compose desde GitHub
-#   2. Configurar variables de entorno en el panel de Dockploy
+# VPN Platform - Docker Compose (Dokploy Compatible)
 # =============================================================================
 
 services:
 
-  # ---------------------------------------------------------------------------
-  # WG-EASY - VPN WireGuard con interfaz web de administración
-  # ---------------------------------------------------------------------------
   wg-easy:
     image: ghcr.io/wg-easy/wg-easy:latest
-    container_name: wg-easy
     restart: unless-stopped
     cap_add:
       - NET_ADMIN
@@ -25,21 +14,20 @@ services:
       - net.ipv4.ip_forward=1
       - net.ipv4.conf.all.src_valid_mark=1
     ports:
-      - "${WG_PORT:-51820}:51820/udp"
+      - "51820:51820/udp"
     environment:
       - WG_HOST=${WG_HOST}
       - PASSWORD=${WG_ADMIN_PASSWORD}
-      - WG_DEFAULT_DNS=${WG_DEFAULT_DNS:-10.8.1.100}
-      - WG_ALLOWED_IPS=${WG_ALLOWED_IPS:-0.0.0.0/0, ::/0}
+      - WG_DEFAULT_DNS=10.8.1.100
+      - WG_ALLOWED_IPS=0.0.0.0/0, ::/0
       - WG_DEFAULT_ADDRESS=10.8.0.x
-      - WG_PORT=${WG_PORT:-51820}
+      - WG_PORT=51820
       - PORT=51821
     volumes:
       - wg-easy-data:/etc/wireguard
     networks:
       vpn-internal:
         ipv4_address: 10.8.1.2
-      dokploy-network: {}
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.wg-easy.rule=Host(`vpn.${SERVER_DOMAIN}`)"
@@ -47,12 +35,8 @@ services:
       - "traefik.http.routers.wg-easy.tls.certresolver=letsencrypt"
       - "traefik.http.services.wg-easy.loadbalancer.server.port=51821"
 
-  # ---------------------------------------------------------------------------
-  # PI-HOLE - Servidor DNS con bloqueo de anuncios y rastreadores
-  # ---------------------------------------------------------------------------
   pihole:
     image: pihole/pihole:latest
-    container_name: pihole
     restart: unless-stopped
     environment:
       - WEBPASSWORD=${PIHOLE_PASSWORD}
@@ -65,7 +49,6 @@ services:
     networks:
       vpn-internal:
         ipv4_address: 10.8.1.100
-      dokploy-network: {}
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.pihole.rule=Host(`dns.${SERVER_DOMAIN}`)"
@@ -73,18 +56,13 @@ services:
       - "traefik.http.routers.pihole.tls.certresolver=letsencrypt"
       - "traefik.http.services.pihole.loadbalancer.server.port=80"
 
-  # ---------------------------------------------------------------------------
-  # UPTIME KUMA - Monitoreo de servicios
-  # ---------------------------------------------------------------------------
   uptime-kuma:
     image: louislam/uptime-kuma:latest
-    container_name: uptime-kuma
     restart: unless-stopped
     volumes:
       - uptime-kuma-data:/app/data
     networks:
-      vpn-internal: {}
-      dokploy-network: {}
+      - vpn-internal
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.uptime-kuma.rule=Host(`status.${SERVER_DOMAIN}`)"
@@ -92,40 +70,13 @@ services:
       - "traefik.http.routers.uptime-kuma.tls.certresolver=letsencrypt"
       - "traefik.http.services.uptime-kuma.loadbalancer.server.port=3001"
 
-  # ---------------------------------------------------------------------------
-  # FAIL2BAN - Protección contra ataques de fuerza bruta
-  # ---------------------------------------------------------------------------
-  fail2ban:
-    image: crazymax/fail2ban:latest
-    container_name: fail2ban
-    restart: unless-stopped
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
-    network_mode: host
-    environment:
-      - TZ=${TIMEZONE:-America/Sao_Paulo}
-    volumes:
-      - ./config/fail2ban:/data
-      - /var/log:/var/log:ro
-
-# =============================================================================
-# REDES
-# =============================================================================
 networks:
-  # Red interna para comunicación entre servicios (WireGuard ↔ Pi-hole)
   vpn-internal:
     driver: bridge
     ipam:
       config:
         - subnet: 10.8.1.0/24
-  # Red de Dockploy (ya existe, creada por Dockploy/Traefik)
-  dokploy-network:
-    external: true
 
-# =============================================================================
-# VOLÚMENES PERSISTENTES
-# =============================================================================
 volumes:
   wg-easy-data:
   pihole-data:
