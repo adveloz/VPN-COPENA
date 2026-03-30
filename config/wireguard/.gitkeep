@@ -1,0 +1,6 @@
+# Archivo de configuración WireGuard placeholder
+# La configuración real se genera automáticamente por wg-easy
+# y se almacena en el volumen Docker wg-easy-data.
+#
+# Los archivos de configuración de clientes se descargan
+# desde la interfaz web en: https://vpn.tudominio.com

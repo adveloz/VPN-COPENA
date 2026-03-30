@@ -1,0 +1,73 @@
+# =============================================================================
+# Traefik - Configuración estática
+# =============================================================================
+# Reverse proxy que maneja HTTPS automático con Let's Encrypt
+# y enruta tráfico a los servicios internos por subdominio.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# API y Dashboard
+# ---------------------------------------------------------------------------
+api:
+  # Dashboard desactivado en producción por seguridad
+  dashboard: false
+
+# ---------------------------------------------------------------------------
+# Entry Points (puertos de entrada)
+# ---------------------------------------------------------------------------
+entryPoints:
+  # Puerto 80 - HTTP (redirige a HTTPS)
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+
+  # Puerto 443 - HTTPS
+  websecure:
+    address: ":443"
+    http:
+      tls:
+        certResolver: letsencrypt
+
+# ---------------------------------------------------------------------------
+# Proveedores de configuración
+# ---------------------------------------------------------------------------
+providers:
+  # Descubrir servicios automáticamente desde Docker
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: vpn-network
+
+  # Configuración dinámica desde archivo
+  file:
+    filename: /dynamic.yml
+    watch: true
+
+# ---------------------------------------------------------------------------
+# Certificados HTTPS con Let's Encrypt
+# ---------------------------------------------------------------------------
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      # Email para notificaciones de certificados
+      email: "${ADMIN_EMAIL}"
+      # Almacenamiento de certificados
+      storage: /letsencrypt/acme.json
+      # Challenge HTTP-01 (el más simple y compatible)
+      httpChallenge:
+        entryPoint: web
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+log:
+  level: WARN
+
+accessLog:
+  filePath: "/var/log/traefik/access.log"
+  bufferingSize: 100

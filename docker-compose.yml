@@ -1,0 +1,183 @@
+# =============================================================================
+# VPN Platform - Docker Compose
+# =============================================================================
+# Plataforma VPN personal con WireGuard, Pi-hole, Traefik y monitoreo.
+#
+# Servicios:
+#   - Traefik:     Reverse proxy + HTTPS (Let's Encrypt)
+#   - wg-easy:     VPN WireGuard con UI de administración
+#   - Pi-hole:     DNS con bloqueo de anuncios
+#   - Fail2Ban:    Protección contra ataques de fuerza bruta
+#   - Uptime Kuma: Monitoreo de servicios
+#
+# Uso:
+#   1. Copiar .env.example a .env y configurar variables
+#   2. docker compose up -d
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # TRAEFIK - Reverse Proxy + HTTPS automático con Let's Encrypt
+  # ---------------------------------------------------------------------------
+  traefik:
+    image: traefik:v3.1
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      # Solo estos puertos se exponen públicamente
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/traefik.yml:ro
+      - ./traefik/dynamic.yml:/dynamic.yml:ro
+      - traefik-certs:/letsencrypt
+    networks:
+      - vpn-network
+    labels:
+      - "traefik.enable=true"
+      # Dashboard de Traefik (opcional, desactivado por defecto)
+      # - "traefik.http.routers.traefik.rule=Host(`traefik.${SERVER_DOMAIN}`)"
+      # - "traefik.http.routers.traefik.service=api@internal"
+      # - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
+
+  # ---------------------------------------------------------------------------
+  # WG-EASY - VPN WireGuard con interfaz web de administración
+  # ---------------------------------------------------------------------------
+  wg-easy:
+    image: ghcr.io/wg-easy/wg-easy:latest
+    container_name: wg-easy
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      # Habilitar IP forwarding para enrutar tráfico VPN
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+    ports:
+      # Puerto UDP para conexiones WireGuard
+      - "${WG_PORT:-51820}:51820/udp"
+    environment:
+      # Dominio o IP pública del servidor
+      - WG_HOST=${WG_HOST}
+      # Contraseña para acceder al panel de administración
+      - PASSWORD=${WG_ADMIN_PASSWORD}
+      # Usar Pi-hole como DNS para todos los clientes VPN
+      - WG_DEFAULT_DNS=${WG_DEFAULT_DNS:-10.8.1.100}
+      # IPs permitidas a través del túnel (0.0.0.0/0 = todo el tráfico)
+      - WG_ALLOWED_IPS=${WG_ALLOWED_IPS:-0.0.0.0/0, ::/0}
+      # Rango de IPs internas del VPN
+      - WG_DEFAULT_ADDRESS=10.8.0.x
+      # Puerto de escucha de WireGuard
+      - WG_PORT=${WG_PORT:-51820}
+      # Puerto del panel web (interno)
+      - PORT=51821
+    volumes:
+      - wg-easy-data:/etc/wireguard
+    networks:
+      vpn-network:
+        ipv4_address: 10.8.1.2
+    labels:
+      - "traefik.enable=true"
+      # Router HTTPS para el panel de administración
+      - "traefik.http.routers.wg-easy.rule=Host(`vpn.${SERVER_DOMAIN}`)"
+      - "traefik.http.routers.wg-easy.entrypoints=websecure"
+      - "traefik.http.routers.wg-easy.tls.certresolver=letsencrypt"
+      - "traefik.http.services.wg-easy.loadbalancer.server.port=51821"
+
+  # ---------------------------------------------------------------------------
+  # PI-HOLE - Servidor DNS con bloqueo de anuncios y rastreadores
+  # ---------------------------------------------------------------------------
+  pihole:
+    image: pihole/pihole:latest
+    container_name: pihole
+    restart: unless-stopped
+    environment:
+      # Contraseña del panel de administración de Pi-hole
+      - WEBPASSWORD=${PIHOLE_PASSWORD}
+      # Zona horaria del servidor
+      - TZ=${TIMEZONE:-America/Sao_Paulo}
+      # DNS upstream (Cloudflare por defecto)
+      - PIHOLE_DNS_=1.1.1.1;1.0.0.1
+      # Escuchar en todas las interfaces
+      - DNSMASQ_LISTENING=all
+    volumes:
+      - pihole-data:/etc/pihole
+      - pihole-dnsmasq:/etc/dnsmasq.d
+    networks:
+      vpn-network:
+        # IP fija para que WireGuard pueda usarla como DNS
+        ipv4_address: 10.8.1.100
+    labels:
+      - "traefik.enable=true"
+      # Router HTTPS para el panel de Pi-hole
+      - "traefik.http.routers.pihole.rule=Host(`dns.${SERVER_DOMAIN}`)"
+      - "traefik.http.routers.pihole.entrypoints=websecure"
+      - "traefik.http.routers.pihole.tls.certresolver=letsencrypt"
+      - "traefik.http.services.pihole.loadbalancer.server.port=80"
+
+  # ---------------------------------------------------------------------------
+  # UPTIME KUMA - Monitoreo de servicios
+  # ---------------------------------------------------------------------------
+  uptime-kuma:
+    image: louislam/uptime-kuma:latest
+    container_name: uptime-kuma
+    restart: unless-stopped
+    volumes:
+      - uptime-kuma-data:/app/data
+    networks:
+      - vpn-network
+    labels:
+      - "traefik.enable=true"
+      # Router HTTPS para Uptime Kuma
+      - "traefik.http.routers.uptime-kuma.rule=Host(`status.${SERVER_DOMAIN}`)"
+      - "traefik.http.routers.uptime-kuma.entrypoints=websecure"
+      - "traefik.http.routers.uptime-kuma.tls.certresolver=letsencrypt"
+      - "traefik.http.services.uptime-kuma.loadbalancer.server.port=3001"
+
+  # ---------------------------------------------------------------------------
+  # FAIL2BAN - Protección contra ataques de fuerza bruta
+  # ---------------------------------------------------------------------------
+  fail2ban:
+    image: crazymax/fail2ban:latest
+    container_name: fail2ban
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    network_mode: host
+    environment:
+      - TZ=${TIMEZONE:-America/Sao_Paulo}
+    volumes:
+      - ./config/fail2ban:/data
+      - /var/log:/var/log:ro
+    depends_on:
+      - traefik
+
+# =============================================================================
+# REDES
+# =============================================================================
+networks:
+  vpn-network:
+    driver: bridge
+    ipam:
+      config:
+        # Subred interna para los servicios
+        - subnet: 10.8.1.0/24
+
+# =============================================================================
+# VOLÚMENES PERSISTENTES
+# =============================================================================
+volumes:
+  traefik-certs:
+    name: traefik-certs
+  wg-easy-data:
+    name: wg-easy-data
+  pihole-data:
+    name: pihole-data
+  pihole-dnsmasq:
+    name: pihole-dnsmasq
+  uptime-kuma-data:
+    name: uptime-kuma-data

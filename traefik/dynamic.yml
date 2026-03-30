@@ -1,0 +1,51 @@
+# =============================================================================
+# Traefik - Configuración dinámica
+# =============================================================================
+# Middlewares y configuración adicional para seguridad.
+# =============================================================================
+
+http:
+  middlewares:
+    # ---------------------------------------------------------------------------
+    # Headers de seguridad para todas las respuestas
+    # ---------------------------------------------------------------------------
+    security-headers:
+      headers:
+        # Prevenir clickjacking
+        frameDeny: true
+        # Prevenir MIME type sniffing
+        contentTypeNosniff: true
+        # Activar protección XSS del navegador
+        browserXssFilter: true
+        # Política de referrer restrictiva
+        referrerPolicy: "strict-origin-when-cross-origin"
+        # HSTS - Forzar HTTPS por 1 año
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        # Content Security Policy
+        contentSecurityPolicy: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'"
+
+    # ---------------------------------------------------------------------------
+    # Rate limiting para prevenir abuso
+    # ---------------------------------------------------------------------------
+    rate-limit:
+      rateLimit:
+        average: 100
+        burst: 50
+        period: 1m
+
+# ---------------------------------------------------------------------------
+# Configuración TLS
+# ---------------------------------------------------------------------------
+tls:
+  options:
+    default:
+      minVersion: VersionTLS12
+      cipherSuites:
+        - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305
+        - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
+        - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256

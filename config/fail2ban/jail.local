@@ -1,0 +1,26 @@
+# =============================================================================
+# Fail2Ban - Configuración general
+# =============================================================================
+# Configuración de jails para proteger los servicios expuestos.
+# =============================================================================
+
+[DEFAULT]
+# Tiempo de baneo (10 minutos)
+bantime = 600
+
+# Ventana de tiempo para contar intentos fallidos (10 minutos)
+findtime = 600
+
+# Número máximo de intentos antes de banear
+maxretry = 5
+
+# Acción por defecto: banear IP con iptables
+banaction = iptables-multiport
+
+# Backend para monitoreo de logs
+backend = auto
+
+# Email de notificación (opcional)
+# destemail = admin@tudominio.com
+# sender = fail2ban@tudominio.com
+# action = %(action_mwl)s

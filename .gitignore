@@ -1,0 +1,27 @@
+# =============================================================================
+# .gitignore - VPN Platform
+# =============================================================================
+
+# Variables de entorno (contienen contraseñas)
+.env
+
+# Backups
+backups/
+
+# Datos generados por Docker
+*.log
+
+# Datos de volúmenes Docker (si se montan localmente)
+data/
+
+# macOS
+.DS_Store
+
+# IDEs
+.vscode/
+.idea/
+
+# Certificados y claves privadas
+*.key
+*.pem
+acme.json
